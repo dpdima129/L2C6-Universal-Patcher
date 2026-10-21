@@ -36,6 +36,24 @@ class PatcherTests(unittest.TestCase):
             self.assertIn("old.example.invalid", zf.read("l2.ini").decode())
         self.assertIn("old.example.invalid", source.read_text())
 
+    def test_backup_verifies_exact_contents_of_multiple_files(self):
+        exe = self.base / "L2.exe"
+        ini = self.base / "l2.ini"
+        exe.write_bytes(bytes([0, 255]) + b"client")
+        ini.write_bytes(b"[URL]\nServerAddr=old.example.invalid\n")
+        archive = create_backup([exe, ini], self.base / "backups")
+        with zipfile.ZipFile(archive) as zf:
+            self.assertIsNone(zf.testzip())
+            self.assertEqual(set(zf.namelist()), {"L2.exe", "l2.ini"})
+            self.assertEqual(zf.read("L2.exe"), exe.read_bytes())
+            self.assertEqual(zf.read("l2.ini"), ini.read_bytes())
+
+    def test_backup_rejects_duplicate_source(self):
+        source = self.base / "l2.ini"
+        source.write_bytes(b"original")
+        with self.assertRaises(ValueError):
+            create_backup([source, source], self.base / "backups")
+
     def test_patch_changes_only_server_address(self):
         config = self.base / "l2.ini"
         config.write_text(
