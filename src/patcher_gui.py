@@ -113,6 +113,10 @@ class PatcherApp(tk.Tk):
             command=self.make_backup
         )
         self.backup_button.pack(side="left")
+        self.update_button = ttk.Button(
+            action_row, text="Обновление: пакет не готов", state="disabled"
+        )
+        self.update_button.pack(side="left", padx=(8, 0))
         ttk.Label(
             action_row, textvariable=self.status, wraplength=520
         ).pack(side="left", fill="x", expand=True, padx=(12, 0))

@@ -27,8 +27,10 @@ def patch_encrypted_config(
 
     if not config_path.is_file():
         raise FileNotFoundError(f"Config not found: {config_path}")
-    if config_path.name.casefold() != "lineage2ver413":
-        raise EncryptedConfigError("Expected a file named Lineage2Ver413.")
+    if config_path.name.casefold() not in {"lineage2ver413", "l2.ini"}:
+        raise EncryptedConfigError(
+            "Expected l2.ini or Lineage2Ver413."
+        )
     if not encoder.is_file() or not decoder.is_file():
         raise FileNotFoundError("Encoder or decoder executable not found.")
     if timeout < 1 or timeout > 120:
