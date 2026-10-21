@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys
 
 import threading
 import tkinter as tk
@@ -8,10 +9,28 @@ from pathlib import Path
 from client_scanner import discover_clients
 from backup_manager import create_backup
 from config_patcher import patch_plain_ini
+from encrypted_patcher import patch_encrypted_config
 
 APP_TITLE = "L2C6 Universal Patcher"
 DEFAULT_SERVER = "ujuko1bg.pwrp.cc"
 
+
+
+def _find_l2encdec() -> Path:
+    """Locate l2encdec bundled by PyInstaller or placed in vendor/bin."""
+    bases = [
+        Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)),
+        Path(__file__).resolve().parent.parent / "vendor" / "bin",
+    ]
+    names = ("l2encdec.exe", "l2encdec")
+    for base in bases:
+        for name in names:
+            candidate = base / name
+            if candidate.is_file():
+                return candidate.resolve()
+    raise FileNotFoundError(
+        "Не найден l2encdec. Проверьте сборку Windows-патчера."
+    )
 
 class PatcherApp(tk.Tk):
     def __init__(self):
@@ -163,19 +182,19 @@ class PatcherApp(tk.Tk):
     def patch_config(self):
         client = self.selected_client
         if client is None or client.config is None:
-            messagebox.showinfo(APP_TITLE, "Сначала найдите клиент с конфигурацией.")
-            return
-
-        if client.config_format != "plain_ini":
-            messagebox.showwarning(
-                APP_TITLE,
-                "Этот формат пока не поддерживается.\n"
-                "Файл не изменён. Зашифрованный Lineage2Ver413 "
-                "будет поддержан только после проверки его формата."
+            messagebox.showinfo(
+                APP_TITLE, "Сначала найдите клиент с конфигурацией."
             )
             return
 
         address = self.server_address.get().strip()
+        if client.config_format not in ("plain_ini", "encrypted_candidate"):
+            messagebox.showwarning(
+                APP_TITLE,
+                "Формат конфигурации не распознан. Файл не изменён."
+            )
+            return
+
         if not messagebox.askyesno(
             APP_TITLE,
             f"Создать резервную копию и изменить ServerAddr на:\n{address}?"
@@ -183,18 +202,37 @@ class PatcherApp(tk.Tk):
             return
 
         try:
-            result = patch_plain_ini(
-                client.config,
-                address,
-                client.root / "patcher_backups"
-            )
+            backup_dir = client.root / "patcher_backups"
+            if client.config_format == "plain_ini":
+                result = patch_plain_ini(
+                    client.config, address, backup_dir
+                )
+                details = str(result)
+            else:
+                encoder = _find_l2encdec()
+                result, backup = patch_encrypted_config(
+                    client.config,
+                    address,
+                    encoder=encoder,
+                    decoder=encoder,
+                    backup_dir=backup_dir,
+                )
+                details = (
+                    f"{result}\n"
+                    + (
+                        f"Резервная копия: {backup}"
+                        if backup
+                        else "Адрес уже установлен; изменений нет."
+                    )
+                )
         except Exception as exc:
-            messagebox.showerror(APP_TITLE, f"Изменение отменено:\n{exc}")
+            messagebox.showerror(
+                APP_TITLE, f"Изменение отменено; проверьте файл:\n{exc}"
+            )
             return
 
         self.status.set(f"Конфигурация обработана: {result}")
-        messagebox.showinfo(APP_TITLE, f"Готово:\n{result}")
-
+        messagebox.showinfo(APP_TITLE, f"Готово:\n{details}")
 
 def main():
     app = PatcherApp()

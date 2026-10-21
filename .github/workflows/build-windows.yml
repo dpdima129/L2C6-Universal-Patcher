@@ -9,7 +9,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout source
+      - name: Checkout patcher
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -17,6 +17,51 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Get l2encdec source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force vendor | Out-Null
+          git clone --depth 1 https://github.com/ritsuwastaken/open-l2encdec.git vendor/open-l2encdec
+          if ($LASTEXITCODE -ne 0) { throw "Could not download l2encdec source" }
+
+      - name: Build Windows l2encdec
+        shell: pwsh
+        run: |
+          cmake -S vendor/open-l2encdec -B vendor/open-l2encdec/build -A x64 -DL2ENCDEC_BUILD_CLI=ON -DBUILD_SHARED_LIBS=OFF -DL2ENCDEC_BUILD_TESTS=OFF
+          if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed" }
+          cmake --build vendor/open-l2encdec/build --config Release
+          if ($LASTEXITCODE -ne 0) { throw "l2encdec build failed" }
+          $exe = Get-ChildItem vendor/open-l2encdec/build -Recurse -Filter l2encdec.exe | Select-Object -First 1
+          if (-not $exe) { throw "l2encdec.exe was not produced" }
+          New-Item -ItemType Directory -Force vendor/bin | Out-Null
+          Copy-Item $exe.FullName vendor/bin/l2encdec.exe
+          Copy-Item vendor/open-l2encdec/LICENSE vendor/bin/LICENSE-l2encdec.txt
+
+      - name: Smoke test Windows l2encdec
+        shell: pwsh
+        run: |
+          $tmp = Join-Path $env:RUNNER_TEMP "l2encdec-smoke"
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          $plain = Join-Path $tmp "source.ini"
+          $encrypted = Join-Path $tmp "Lineage2Ver413"
+          $decoded = Join-Path $tmp "decoded.ini"
+          @("[URL]", "ServerAddr=127.0.0.1", "Protocol=1") |
+            Set-Content -Encoding utf8 $plain
+          & vendor/bin/l2encdec.exe -c encode -p 413 -o $encrypted $plain
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $encrypted)) {
+            throw "Protocol 413 encoding smoke test failed"
+          }
+          & vendor/bin/l2encdec.exe -c decode -p 413 -o $decoded $encrypted
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $decoded)) {
+            throw "Protocol 413 decoding smoke test failed"
+          }
+          if (-not (Select-String -Path $decoded -Pattern "ServerAddr=127\.0\.0\.1" -Quiet)) {
+            throw "Decoded INI content verification failed"
+          }
+          Write-Host "Protocol 413 encode/decode smoke test passed"
       - name: Install PyInstaller
         run: python -m pip install --upgrade pyinstaller
 
@@ -24,11 +69,10 @@ jobs:
         run: python -m unittest discover -s src -p "test_*.py" -v
 
       - name: Build Windows executable
-        run: >-
-          pyinstaller --noconfirm --clean --onefile --windowed
-          --name L2C6_Universal_Patcher
-          --paths src
-          src/patcher_gui.py
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name L2C6_Universal_Patcher --paths src --add-binary "vendor/bin/l2encdec.exe;." --add-data "vendor/bin/LICENSE-l2encdec.txt;licenses" src/patcher_gui.py
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
