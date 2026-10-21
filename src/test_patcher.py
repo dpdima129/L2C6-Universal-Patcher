@@ -48,6 +48,27 @@ class PatcherTests(unittest.TestCase):
         self.assertIn("Protocol=746", text)
         self.assertNotIn("old.example.invalid", text)
 
+
+    def test_patch_only_url_section(self):
+        config = self.base / "l2.ini"
+        config.write_text(
+            "[Other]\nServerAddr=keep.example.invalid\n"
+            "[URL]\nServerAddr=old.example.invalid\n",
+            encoding="utf-8",
+        )
+        patch_plain_ini(config, "ujuko1bg.pwrp.cc", self.base / "backups")
+        text = config.read_text(encoding="utf-8")
+        self.assertIn("ServerAddr=keep.example.invalid", text)
+        self.assertIn("ServerAddr=ujuko1bg.pwrp.cc", text)
+
+    def test_refuse_serveraddr_outside_url_section(self):
+        config = self.base / "l2.ini"
+        original = "[Other]\nServerAddr=keep.example.invalid\n"
+        config.write_text(original, encoding="utf-8")
+        with self.assertRaises(ValueError):
+            patch_plain_ini(config, "ujuko1bg.pwrp.cc", self.base / "backups")
+        self.assertEqual(config.read_text(encoding="utf-8"), original)
+
     def test_unknown_config_is_not_modified(self):
         config = self.base / "l2.ini"
         original = b"\x00\xff\x81\x02encrypted"

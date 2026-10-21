@@ -59,10 +59,8 @@ def patch_plain_ini(
     config_path = config_path.expanduser().resolve()
     if not config_path.is_file():
         raise FileNotFoundError(f"Config not found: {config_path}")
-
     if config_path.name.lower() != "l2.ini":
         raise ValueError("Only a plain l2.ini file is supported.")
-
     fmt = classify_config(config_path)
     if fmt != "plain_ini":
         raise ValueError(
@@ -72,32 +70,41 @@ def patch_plain_ini(
     server_address = validate_server_address(server_address)
     raw = config_path.read_bytes()
     text = raw.decode("utf-8-sig")
+    lines = text.splitlines(keepends=True)
+    section = None
+    target_indexes = []
 
-    # Require exactly one existing ServerAddr key; do not guess the INI section.
-    matches = list(re.finditer(
-        r"(?im)^(\s*ServerAddr\s*=\s*)([^;\r\n]*)([ \t]*(?:;[^\r\n]*)?\r?)$",
-        text,
-    ))
-    if len(matches) != 1:
+    for i, line in enumerate(lines):
+        header = re.match(r"^\s*\[([^\]]+)\]\s*(?:;[^\r\n]*)?(?:\r?\n)?$", line)
+        if header:
+            section = header.group(1).strip().casefold()
+            continue
+        if section == "url" and re.match(r"^\s*ServerAddr\s*=", line, re.I):
+            target_indexes.append(i)
+
+    if len(target_indexes) != 1:
         raise ValueError(
-            f"Expected exactly one ServerAddr setting; found {len(matches)}. "
-            "No changes made."
+            f"Expected exactly one ServerAddr setting in [URL]; "
+            f"found {len(target_indexes)}. No changes made."
         )
 
-    match = matches[0]
-    updated = (
-        text[:match.start()]
-        + match.group(1) + server_address + match.group(3)
-        + text[match.end():]
+    i = target_indexes[0]
+    line = lines[i]
+    match = re.match(
+        r"^(\s*ServerAddr\s*=\s*)([^;\r\n]*)([ \t]*(?:;[^\r\n]*)?)(\r?\n?)$",
+        line,
+        re.I,
     )
+    if not match:
+        raise ValueError("Could not safely parse ServerAddr in [URL]. No changes made.")
 
+    lines[i] = match.group(1) + server_address + match.group(3) + match.group(4)
+    updated = "".join(lines)
     if updated == text:
         return config_path
 
     if backup_dir is None:
         backup_dir = config_path.parent / "backups"
-
-    # Back up and validate before replacing the original file.
     create_backup([config_path], backup_dir)
 
     temp_name = None
@@ -107,20 +114,18 @@ def patch_plain_ini(
             prefix=".l2ini-", suffix=".tmp", delete=False
         ) as temp:
             temp_name = temp.name
-            temp.write(updated.encode("utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"))
+            encoding = "utf-8-sig" if raw.startswith(b"\xef\xbb\xbf") else "utf-8"
+            temp.write(updated.encode(encoding))
             temp.flush()
 
-        # Ensure the temporary output remains recognizable as plain INI.
         if classify_config(Path(temp_name)) != "plain_ini":
             raise RuntimeError("Validation failed; original file left unchanged.")
-
         Path(temp_name).replace(config_path)
     finally:
         if temp_name:
             Path(temp_name).unlink(missing_ok=True)
 
     return config_path
-
 
 if __name__ == "__main__":
     import argparse
