@@ -75,7 +75,7 @@ def patch_plain_ini(
 
     # Require exactly one existing ServerAddr key; do not guess the INI section.
     matches = list(re.finditer(
-        r"(?im)^(\s*ServerAddr\s*=\s*)([^;\r\n]*)([ \t]*(?:;[^\r\n]*)?)$",
+        r"(?im)^(\s*ServerAddr\s*=\s*)([^;\r\n]*)([ \t]*(?:;[^\r\n]*)?\r?)$",
         text,
     ))
     if len(matches) != 1:
