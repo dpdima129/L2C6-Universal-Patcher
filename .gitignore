@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.spec.bak
+build/
+dist/
+*.exe
+*.zip
+*.tar.gz
+.env
+.env.*
+!.env.example
+secrets/
+patcher_backups/
