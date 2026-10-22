@@ -85,7 +85,8 @@ class UpdateManagerTests(unittest.TestCase):
             ]):
                 changed = update_files("https://example.test/api/v1/manifest", root)
             self.assertEqual((root / "system/test.dat").read_bytes(), body)
-            self.assertEqual([p.resolve() for p in changed], [(root / "system/test.dat").resolve()])
+            self.assertEqual(len(changed), 1)
+            self.assertTrue(changed[0].samefile(root / "system/test.dat"))
 
 
 if __name__ == "__main__":
