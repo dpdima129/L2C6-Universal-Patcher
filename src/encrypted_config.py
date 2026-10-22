@@ -27,7 +27,7 @@ def _looks_like_l2_ini(path: Path) -> bool:
         header = re.match(r"^\s*\[([^\]]+)\]", line)
         if header:
             section = header.group(1).strip().casefold()
-        elif section == "url" and re.match(
+        elif section in {"url", "auth"} and re.match(
             r"^\s*ServerAddr\s*=", line, re.IGNORECASE
         ):
             server_addr_count += 1

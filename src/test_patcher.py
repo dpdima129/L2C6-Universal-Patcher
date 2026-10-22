@@ -87,6 +87,26 @@ class PatcherTests(unittest.TestCase):
             patch_plain_ini(config, "ujuko1bg.pwrp.cc", self.base / "backups")
         self.assertEqual(config.read_text(encoding="utf-8"), original)
 
+    def test_patch_auth_section(self):
+        config = self.base / "l2.ini"
+        original = (
+            "[URL]\n"
+            "NPLoginWebURL=lineage2.network\n"
+            "[Auth]\n"
+            "ServerAddr=149.202.227.142\n"
+            "UseAuthUserData=true\n"
+        )
+        config.write_text(original, encoding="utf-8")
+
+        patch_plain_ini(config, "ujuko1bg.pwrp.cc", self.base / "backups")
+
+        updated = config.read_text(encoding="utf-8")
+        self.assertIn("[Auth]", updated)
+        self.assertIn("ServerAddr=ujuko1bg.pwrp.cc", updated)
+        self.assertIn("NPLoginWebURL=lineage2.network", updated)
+        self.assertIn("UseAuthUserData=true", updated)
+        self.assertNotIn("149.202.227.142", updated)
+
     def test_unknown_config_is_not_modified(self):
         config = self.base / "l2.ini"
         original = b"\x00\xff\x81\x02encrypted"

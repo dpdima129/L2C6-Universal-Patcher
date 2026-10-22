@@ -79,12 +79,12 @@ def patch_plain_ini(
         if header:
             section = header.group(1).strip().casefold()
             continue
-        if section == "url" and re.match(r"^\s*ServerAddr\s*=", line, re.I):
+        if section in {"url", "auth"} and re.match(r"^\s*ServerAddr\s*=", line, re.I):
             target_indexes.append(i)
 
     if len(target_indexes) != 1:
         raise ValueError(
-            f"Expected exactly one ServerAddr setting in [URL]; "
+            f"Expected exactly one ServerAddr setting in [URL] or [Auth]; "
             f"found {len(target_indexes)}. No changes made."
         )
 
@@ -96,7 +96,7 @@ def patch_plain_ini(
         re.I,
     )
     if not match:
-        raise ValueError("Could not safely parse ServerAddr in [URL]. No changes made.")
+        raise ValueError("Could not safely parse ServerAddr in [URL] or [Auth]. No changes made.")
 
     lines[i] = match.group(1) + server_address + match.group(3) + match.group(4)
     updated = "".join(lines)
