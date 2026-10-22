@@ -35,8 +35,14 @@ def classify_config(path: Path) -> str:
     except UnicodeDecodeError:
         pass
 
+    # Recognize the legacy protocol-413 header stored as UTF-16LE,
+    # even when the encrypted config is named L2.ini.
+    header = "Lineage2Ver413".encode("utf-16le")
+    payload = data[2:] if data.startswith(bytes.fromhex("FF FE")) else data
+    if payload.startswith(header):
+        return "encrypted_candidate"
     # Known legacy encrypted config filename; encryption is not assumed valid.
-    if path.name.lower() == "lineage2ver413":
+    if path.name.casefold() == "lineage2ver413":
         return "encrypted_candidate"
 
     return "unknown"

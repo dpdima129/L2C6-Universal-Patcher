@@ -23,7 +23,6 @@ def _looks_like_l2_ini(path: Path) -> bool:
 
     section = None
     server_addr_count = 0
-
     for line in text.splitlines():
         header = re.match(r"^\s*\[([^\]]+)\]", line)
         if header:
@@ -42,31 +41,33 @@ def decoded_config(
     decoder: Path,
     timeout: int = 15,
 ) -> Iterator[Path]:
-    """
-    Decode a Lineage2Ver413 candidate into a temporary file.
-
-    The source is never modified. The yielded file exists only inside
-    the context and is removed automatically afterwards.
-    """
+    """Decode a supported encrypted config to a temporary file."""
     source = source.expanduser().resolve()
     decoder = decoder.expanduser().resolve()
 
     if not source.is_file():
         raise FileNotFoundError(f"Config not found: {source}")
-    if source.name.casefold() != "lineage2ver413":
+
+    if source.name.casefold() not in {"lineage2ver413", "l2.ini"}:
         raise EncryptedConfigError(
-            "Expected a file named Lineage2Ver413."
+            "Expected l2.ini or Lineage2Ver413."
         )
+
     if not decoder.is_file():
         raise FileNotFoundError(f"Decoder not found: {decoder}")
-    if timeout < 1 or timeout > 120:
+
+    if not 1 <= timeout <= 120:
         raise ValueError("Timeout must be between 1 and 120 seconds.")
 
     with tempfile.TemporaryDirectory(prefix="l2c6-decode-") as temp_dir:
-        output = Path(temp_dir) / "decoded.ini"
+        temp = Path(temp_dir)
+        decoder_input = temp / "Lineage2Ver413"
+        output = temp / "decoded.ini"
+
+        # l2encdec expects this filename; only a temporary copy is renamed.
+        decoder_input.write_bytes(source.read_bytes())
         errors = []
 
-        # Try both parameter sets; accept only a structurally valid INI.
         for extra_args in ([], ["-l"]):
             output.unlink(missing_ok=True)
             command = [
@@ -75,7 +76,7 @@ def decoded_config(
                 "-p", "413",
                 "-o", str(output),
                 *extra_args,
-                str(source),
+                str(decoder_input),
             ]
 
             try:
@@ -101,7 +102,9 @@ def decoded_config(
                 errors.append("Decoded output is not a valid L2 INI.")
             else:
                 detail = (result.stderr or result.stdout or "").strip()
-                errors.append(detail or f"Decoder exit code: {result.returncode}")
+                errors.append(
+                    detail or f"Decoder exit code: {result.returncode}"
+                )
 
         raise EncryptedConfigError(
             "Could not decode a valid Lineage 2 INI. "

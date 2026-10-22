@@ -101,6 +101,14 @@ class PatcherTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_server_address(address)
 
+    def test_utf16le_protocol_header_in_l2_ini_is_encrypted_candidate(self):
+        config = self.base / "l2.ini"
+        header = "Lineage2Ver413".encode("utf-16le")
+        for prefix in (b"", bytes.fromhex("FF FE")):
+            with self.subTest(bom=bool(prefix)):
+                config.write_bytes(prefix + header + bytes.fromhex("00 01 02"))
+                self.assertEqual(classify_config(config), "encrypted_candidate")
+
     def test_encrypted_filename_not_treated_as_plain_ini(self):
         config = self.base / "Lineage2Ver413"
         config.write_bytes(b"\x00\x01\x02\x03")
